@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: social-feed-schema-init
+  namespace: social-feed
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: schema-init
+          image: cassandra:5.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -ec
+            - |
+              until cqlsh cassandra-client.social-feed.svc.cluster.local 9042 -e "DESCRIBE KEYSPACES"; do
+                echo "Waiting for Cassandra..."
+                sleep 5
+              done
+              cqlsh cassandra-client.social-feed.svc.cluster.local 9042 -f /schema/schema.cql
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+      volumes:
+        - name: schema
+          configMap:
+            name: social-feed-schema

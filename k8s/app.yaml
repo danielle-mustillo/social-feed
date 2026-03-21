@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-feed-api
+  namespace: social-feed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: social-feed-api
+  template:
+    metadata:
+      labels:
+        app: social-feed-api
+    spec:
+      containers:
+        - name: api
+          image: social-feed:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: CASSANDRA_CONTACT_POINTS
+              value: cassandra-client.social-feed.svc.cluster.local
+            - name: CASSANDRA_PORT
+              value: "9042"
+            - name: CASSANDRA_KEYSPACE
+              value: social_feed
+            - name: CASSANDRA_CONNECT_RETRIES
+              value: "90"
+            - name: CASSANDRA_RETRY_DELAY_SECONDS
+              value: "2"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-feed-api
+  namespace: social-feed
+spec:
+  selector:
+    app: social-feed-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
