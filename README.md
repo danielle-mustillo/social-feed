@@ -1,6 +1,6 @@
 # Cassandra Social Feed on Kind with MetalLB
 
-This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster running on one physical machine: a 3-node local Kubernetes cluster (`1` control-plane, `2` workers), a three-node Cassandra ring, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
+This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster running on one physical machine: a 7-node local Kubernetes cluster (`1` control-plane, `6` workers), a six-node Cassandra ring modeled as two datacenters with three racks each, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
 
 ## Why Cassandra
 
@@ -137,13 +137,13 @@ When enabled, the app logs:
 - one Cassandra trace log line per repository query
 - optional trace event lines if `CASSANDRA_TRACE_LOG_EVENTS=true`
 
-The deployment manifest currently enables tracing in [app.yaml](/home/DanielleMustillo/test/social-feed/k8s/app.yaml). Because the local cluster now runs three Cassandra nodes, the `coordinator` field can vary across requests and is useful for demonstrating how the driver routes work around the ring.
+The deployment manifest currently enables tracing in [app.yaml](/home/DanielleMustillo/test/social-feed/k8s/app.yaml). Because the local cluster now runs six Cassandra nodes across two logical datacenters, the `coordinator` field is useful for demonstrating how the driver routes requests around the ring.
 
 ## Limitations
 
 - The service duplicates post content into follower feeds.
 - Popular accounts create the classic Cassandra "celebrity problem" because one post can fan out to many followers.
-- The demo uses a three-node Cassandra ring for local development, but it is still not production-grade.
+- The demo uses a six-node Cassandra ring for local development, but it is still not production-grade.
 - There is no pagination, authentication, ranking, or async fanout in this version.
 - Usernames are not unique and follow relationships are idempotent only because the Cassandra primary key overwrites duplicates.
 
@@ -267,9 +267,12 @@ If either upstream version changes, override `INGRESS_NGINX_MANIFEST` or `METALL
 make up
 ```
 
-This creates the kind cluster, installs MetalLB, installs ingress-nginx, starts a three-node Cassandra ring, initializes the schema, and deploys the API.
+This creates the kind cluster, installs MetalLB, installs ingress-nginx, starts a six-node Cassandra ring, initializes the schema, and deploys the API.
 
-The `kind` cluster itself is now multi-node, but all of those Kubernetes nodes are still Docker containers on this same machine. That gives you more realistic scheduling and pod placement without requiring extra hardware.
+The `kind` cluster itself is now multi-node, but all of those Kubernetes nodes are still Docker containers on this same machine. Cassandra is pinned to the 6 worker nodes and modeled as:
+
+- `dc1/rack1`, `dc1/rack2`, `dc1/rack3`
+- `dc2/rack1`, `dc2/rack2`, `dc2/rack3`
 
 The default MetalLB pool is `172.19.255.200-172.19.255.250`. That assumes the standard Docker `kind` bridge subnet on Linux. If your local Docker network uses a different subnet, update [k8s/metallb-config.yaml](/home/DanielleMustillo/test/social-feed/k8s/metallb-config.yaml) before running `make up`.
 
@@ -293,7 +296,7 @@ make deploy
 
 This rebuilds the image, loads it into kind, reapplies the app manifests, and restarts the `social-feed-api` deployment. It does not re-run Cassandra or schema bootstrap.
 
-If you are upgrading an existing single-node install to the three-node topology, rebuild the data plane with:
+If you are upgrading an existing install to the 2-datacenter, 6-rack topology, rebuild the data plane with:
 
 ```bash
 make clean
@@ -311,7 +314,7 @@ kubectl get pods -n social-feed -o wide
 kubectl get ingress -n social-feed
 kubectl logs job/social-feed-schema-init -n social-feed
 kubectl get svc -n ingress-nginx ingress-nginx-controller
-kubectl exec -n social-feed cassandra-0 -- nodetool status
+kubectl exec -n social-feed cassandra-dc1-rack1-0 -- nodetool status
 ```
 
 Then call the health endpoint:
@@ -335,13 +338,13 @@ make test
 To show multi-node Cassandra behavior directly, compare the ring view and the coordinator fields in the app logs:
 
 ```bash
-kubectl exec -n social-feed cassandra-0 -- nodetool status
+kubectl exec -n social-feed cassandra-dc1-rack1-0 -- nodetool status
 kubectl logs -n social-feed deployment/social-feed-api --tail=200 | grep cassandra_trace
 ```
 
-`nodetool status` should show three `UN` nodes in `dc1`, and the trace logs will include `coordinator=<pod-ip>` values that identify which Cassandra node coordinated each request.
+`nodetool status` should show three `UN` nodes in `dc1` and three `UN` nodes in `dc2`, with racks `rack1`, `rack2`, and `rack3` in each datacenter. The trace logs include `coordinator=<pod-ip>` values that identify which Cassandra node coordinated each request.
 
-`kubectl get nodes` should show one control-plane node and two worker nodes for the local kind cluster. `kubectl get pods -n social-feed -o wide` lets you see which Kubernetes node each Cassandra pod landed on.
+`kubectl get nodes` should show one control-plane node and six worker nodes for the local kind cluster. `kubectl get pods -n social-feed -o wide` lets you see which Kubernetes node each Cassandra pod landed on.
 
 This resolves the current ingress `LoadBalancer` IP and runs [smoke_live.sh](/home/DanielleMustillo/test/social-feed/tests/smoke_live.sh) with the correct base URL and `Host` header.
 

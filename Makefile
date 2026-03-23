@@ -13,7 +13,7 @@ INGRESS_HOST ?= social-feed.local
 
 help:
 	@printf "Targets:\\n"
-	@printf "  make up          # create the cluster and deploy the full stack with a 3-node Cassandra ring\\n"
+	@printf "  make up          # create the cluster and deploy the full stack with a 6-node Cassandra ring\\n"
 	@printf "  make deploy      # rebuild and redeploy only the API against the current cluster\\n"
 	@printf "  make ingress-ip  # print the ingress LoadBalancer IP\\n"
 	@printf "  make test        # run the bash demo script against the ingress host\\n"
@@ -66,13 +66,26 @@ _schema-init: _schema-config
 _bootstrap-data: _schema-config
 	kubectl apply -f k8s/namespace.yaml
 	kubectl apply -f k8s/cassandra.yaml
-	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra --timeout=600s
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc1-rack1 --timeout=1200s
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc2-rack1 --timeout=1200s
+	kubectl -n $(NAMESPACE) scale statefulset/cassandra-dc1-rack2 --replicas=1
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc1-rack2 --timeout=1200s
+	kubectl -n $(NAMESPACE) scale statefulset/cassandra-dc1-rack3 --replicas=1
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc1-rack3 --timeout=1200s
+	kubectl -n $(NAMESPACE) scale statefulset/cassandra-dc2-rack2 --replicas=1
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc2-rack2 --timeout=1200s
+	kubectl -n $(NAMESPACE) scale statefulset/cassandra-dc2-rack3 --replicas=1
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra-dc2-rack3 --timeout=1200s
 	$(MAKE) _schema-init
 
 clean:
-	kubectl delete -f k8s/metallb-config.yaml --ignore-not-found=true
-	kubectl delete -f k8s/ingress.yaml --ignore-not-found=true
-	kubectl delete -f k8s/app.yaml --ignore-not-found=true
-	kubectl delete -f k8s/cassandra.yaml --ignore-not-found=true
-	kubectl delete namespace $(NAMESPACE) --ignore-not-found=true
-	kind delete cluster --name $(CLUSTER_NAME)
+	@$(SHELL) -lc 'if kind get clusters | grep -qx "$(CLUSTER_NAME)"; then \
+		kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --wait=false >/dev/null 2>&1 || true; \
+		for pvc in $$(kubectl get pvc -n $(NAMESPACE) -o name 2>/dev/null); do \
+			kubectl patch $$pvc -n $(NAMESPACE) --type=json -p='"'"'"'"'"'"'"'"'[{"op":"remove","path":"/metadata/finalizers"}]'"'"'"'"'"'"'"'"' >/dev/null 2>&1 || true; \
+		done; \
+		kubectl patch namespace $(NAMESPACE) --type=json -p='"'"'"'"'"'"'"'"'[{"op":"remove","path":"/spec/finalizers"}]'"'"'"'"'"'"'"'"' >/dev/null 2>&1 || true; \
+		kind delete cluster --name $(CLUSTER_NAME); \
+	else \
+		kind delete cluster --name $(CLUSTER_NAME) >/dev/null 2>&1 || true; \
+	fi'

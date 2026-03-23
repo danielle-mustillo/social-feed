@@ -22,7 +22,7 @@ spec:
               name: http
           env:
             - name: CASSANDRA_CONTACT_POINTS
-              value: cassandra-0.cassandra.social-feed.svc.cluster.local,cassandra-1.cassandra.social-feed.svc.cluster.local,cassandra-2.cassandra.social-feed.svc.cluster.local
+              value: cassandra-dc1-rack1-0.cassandra.social-feed.svc.cluster.local,cassandra-dc1-rack2-0.cassandra.social-feed.svc.cluster.local,cassandra-dc1-rack3-0.cassandra.social-feed.svc.cluster.local,cassandra-dc2-rack1-0.cassandra.social-feed.svc.cluster.local,cassandra-dc2-rack2-0.cassandra.social-feed.svc.cluster.local,cassandra-dc2-rack3-0.cassandra.social-feed.svc.cluster.local
             - name: CASSANDRA_PORT
               value: "9042"
             - name: CASSANDRA_KEYSPACE
@@ -32,11 +32,11 @@ spec:
             - name: CASSANDRA_RETRY_DELAY_SECONDS
               value: "2"
             - name: CASSANDRA_TRACE_ENABLED
-              value: "true"
+              value: "false"
             - name: CASSANDRA_TRACE_SAMPLE_RATE
-              value: "1.0"
+              value: "0.0"
             - name: CASSANDRA_TRACE_LOG_EVENTS
-              value: "true"
+              value: "false"
             - name: CASSANDRA_TRACE_MAX_WAIT_SECONDS
               value: "5"
           readinessProbe:

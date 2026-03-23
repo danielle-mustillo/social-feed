@@ -3,8 +3,32 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc1"
+      cassandra.rack: "rack1"
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc1"
+      cassandra.rack: "rack2"
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc1"
+      cassandra.rack: "rack3"
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc2"
+      cassandra.rack: "rack1"
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc2"
+      cassandra.rack: "rack2"
   - role: worker
+    labels:
+      cassandra.node: "true"
+      cassandra.datacenter: "dc2"
+      cassandra.rack: "rack3"

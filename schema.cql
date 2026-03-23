@@ -1,8 +1,8 @@
 CREATE KEYSPACE IF NOT EXISTS social_feed
-WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
+WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3, 'dc2': 3};
 
 ALTER KEYSPACE social_feed
-WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
+WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3, 'dc2': 3};
 
 USE social_feed;
 
