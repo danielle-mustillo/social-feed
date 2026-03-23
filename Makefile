@@ -13,8 +13,8 @@ INGRESS_HOST ?= social-feed.local
 
 help:
 	@printf "Targets:\\n"
-	@printf "  make up          # create the cluster and deploy the full stack\\n"
-	@printf "  make deploy      # rebuild and redeploy only the API\\n"
+	@printf "  make up          # create the cluster and deploy the full stack with a 3-node Cassandra ring\\n"
+	@printf "  make deploy      # rebuild and redeploy only the API against the current cluster\\n"
 	@printf "  make ingress-ip  # print the ingress LoadBalancer IP\\n"
 	@printf "  make test        # run the bash demo script against the ingress host\\n"
 	@printf "  make clean       # delete the cluster and app resources\\n"
@@ -66,7 +66,7 @@ _schema-init: _schema-config
 _bootstrap-data: _schema-config
 	kubectl apply -f k8s/namespace.yaml
 	kubectl apply -f k8s/cassandra.yaml
-	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra --timeout=300s
+	kubectl -n $(NAMESPACE) rollout status statefulset/cassandra --timeout=600s
 	$(MAKE) _schema-init
 
 clean:

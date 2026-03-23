@@ -1,6 +1,6 @@
 # Cassandra Social Feed on Kind with MetalLB
 
-This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster: one Cassandra node, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
+This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster: a three-node Cassandra ring, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
 
 ## Why Cassandra
 
@@ -137,13 +137,13 @@ When enabled, the app logs:
 - one Cassandra trace log line per repository query
 - optional trace event lines if `CASSANDRA_TRACE_LOG_EVENTS=true`
 
-The deployment manifest keeps tracing disabled by default in [app.yaml](/home/DanielleMustillo/test/social-feed/k8s/app.yaml). Since this repo runs a single Cassandra node, the coordinator will usually be that same pod until the topology changes.
+The deployment manifest currently enables tracing in [app.yaml](/home/DanielleMustillo/test/social-feed/k8s/app.yaml). Because the local cluster now runs three Cassandra nodes, the `coordinator` field can vary across requests and is useful for demonstrating how the driver routes work around the ring.
 
 ## Limitations
 
 - The service duplicates post content into follower feeds.
 - Popular accounts create the classic Cassandra "celebrity problem" because one post can fan out to many followers.
-- The demo uses a single Cassandra node for local development only.
+- The demo uses a three-node Cassandra ring for local development, but it is still not production-grade.
 - There is no pagination, authentication, ranking, or async fanout in this version.
 - Usernames are not unique and follow relationships are idempotent only because the Cassandra primary key overwrites duplicates.
 
@@ -267,7 +267,7 @@ If either upstream version changes, override `INGRESS_NGINX_MANIFEST` or `METALL
 make up
 ```
 
-This creates the kind cluster, installs MetalLB, installs ingress-nginx, starts Cassandra, initializes the schema, and deploys the API.
+This creates the kind cluster, installs MetalLB, installs ingress-nginx, starts a three-node Cassandra ring, initializes the schema, and deploys the API.
 
 The default MetalLB pool is `172.19.255.200-172.19.255.250`. That assumes the standard Docker `kind` bridge subnet on Linux. If your local Docker network uses a different subnet, update [k8s/metallb-config.yaml](/home/DanielleMustillo/test/social-feed/k8s/metallb-config.yaml) before running `make up`.
 
@@ -291,6 +291,13 @@ make deploy
 
 This rebuilds the image, loads it into kind, reapplies the app manifests, and restarts the `social-feed-api` deployment. It does not re-run Cassandra or schema bootstrap.
 
+If you are upgrading an existing single-node install to the three-node topology, rebuild the data plane with:
+
+```bash
+make clean
+make up
+```
+
 ### 4. Verify the deployment
 
 Check the workload state:
@@ -300,6 +307,7 @@ kubectl get pods -n social-feed
 kubectl get ingress -n social-feed
 kubectl logs job/social-feed-schema-init -n social-feed
 kubectl get svc -n ingress-nginx ingress-nginx-controller
+kubectl exec -n social-feed cassandra-0 -- nodetool status
 ```
 
 Then call the health endpoint:
@@ -319,6 +327,15 @@ Run the bash demo script against the live ingress:
 ```bash
 make test
 ```
+
+To show multi-node Cassandra behavior directly, compare the ring view and the coordinator fields in the app logs:
+
+```bash
+kubectl exec -n social-feed cassandra-0 -- nodetool status
+kubectl logs -n social-feed deployment/social-feed-api --tail=200 | grep cassandra_trace
+```
+
+`nodetool status` should show three `UN` nodes in `dc1`, and the trace logs will include `coordinator=<pod-ip>` values that identify which Cassandra node coordinated each request.
 
 This resolves the current ingress `LoadBalancer` IP and runs [smoke_live.sh](/home/DanielleMustillo/test/social-feed/tests/smoke_live.sh) with the correct base URL and `Host` header.
 

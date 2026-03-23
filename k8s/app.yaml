@@ -22,7 +22,7 @@ spec:
               name: http
           env:
             - name: CASSANDRA_CONTACT_POINTS
-              value: cassandra-client.social-feed.svc.cluster.local
+              value: cassandra-0.cassandra.social-feed.svc.cluster.local,cassandra-1.cassandra.social-feed.svc.cluster.local,cassandra-2.cassandra.social-feed.svc.cluster.local
             - name: CASSANDRA_PORT
               value: "9042"
             - name: CASSANDRA_KEYSPACE

@@ -1,5 +1,8 @@
 CREATE KEYSPACE IF NOT EXISTS social_feed
-WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
+
+ALTER KEYSPACE social_feed
+WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 3};
 
 USE social_feed;
 

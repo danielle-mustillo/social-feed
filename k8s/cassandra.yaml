@@ -32,7 +32,7 @@ metadata:
   namespace: social-feed
 spec:
   serviceName: cassandra
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: cassandra
@@ -47,21 +47,43 @@ spec:
           image: cassandra:5.0
           imagePullPolicy: IfNotPresent
           ports:
+            - containerPort: 7000
+              name: intra-node
             - containerPort: 9042
               name: cql
+            - containerPort: 7199
+              name: jmx
           env:
             - name: CASSANDRA_CLUSTER_NAME
               value: social-feed
+            - name: CASSANDRA_SEEDS
+              value: cassandra-0.cassandra.social-feed.svc.cluster.local
             - name: CASSANDRA_DC
               value: dc1
             - name: CASSANDRA_RACK
               value: rack1
             - name: CASSANDRA_ENDPOINT_SNITCH
               value: GossipingPropertyFileSnitch
+            - name: CASSANDRA_NUM_TOKENS
+              value: "16"
+            - name: CASSANDRA_RPC_ADDRESS
+              value: 0.0.0.0
+            - name: CASSANDRA_LISTEN_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CASSANDRA_BROADCAST_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CASSANDRA_BROADCAST_RPC_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: MAX_HEAP_SIZE
-              value: 512M
+              value: 384M
             - name: HEAP_NEWSIZE
-              value: 128M
+              value: 96M
           volumeMounts:
             - name: data
               mountPath: /var/lib/cassandra
@@ -87,10 +109,10 @@ spec:
             timeoutSeconds: 5
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 250m
+              memory: 768Mi
             limits:
-              memory: 1Gi
+              memory: 768Mi
   volumeClaimTemplates:
     - metadata:
         name: data
