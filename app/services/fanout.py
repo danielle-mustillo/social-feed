@@ -26,7 +26,10 @@ class FanoutService:
             body=body,
         )
 
-        for follower_id in self._repository.get_followers(user_id):
+        for follower_id in self._repository.get_followers(
+            user_id,
+            operation="create_post.fetch_followers",
+        ):
             self._repository.add_feed_item(
                 user_id=follower_id,
                 event_time=post_time,

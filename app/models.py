@@ -65,3 +65,7 @@ class HealthResponse(BaseModel):
 
 class ResetResponse(BaseModel):
     status: str
+
+
+class UserDeleteResponse(BaseModel):
+    status: str

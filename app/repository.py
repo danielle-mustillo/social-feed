@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Protocol
 from uuid import UUID, uuid1, uuid4
 
-from app.models import (
-    FeedItemResponse,
-    FollowersResponse,
-    FollowResponse,
-    PostResponse,
-    UserResponse,
-    timeuuid_to_datetime,
-)
+from app.models import FeedItemResponse, FollowResponse, PostResponse, UserResponse, timeuuid_to_datetime
+
+
+@dataclass
+class StoredUser:
+    user_id: UUID
+    username: str
+    deleted_at: datetime | None = None
+
+    def as_response(self) -> UserResponse:
+        return UserResponse(user_id=self.user_id, username=self.username)
 
 
 class SocialFeedRepository(Protocol):
@@ -25,9 +29,15 @@ class SocialFeedRepository(Protocol):
 
     def user_exists(self, user_id: UUID) -> bool: ...
 
+    def soft_delete_user(self, user_id: UUID) -> bool: ...
+
     def create_follow(self, follower_id: UUID, followed_id: UUID) -> FollowResponse: ...
 
-    def get_followers(self, user_id: UUID) -> list[UUID]: ...
+    def get_followers(
+        self,
+        user_id: UUID,
+        operation: str = "get_followers.select_followers",
+    ) -> list[UUID]: ...
 
     def get_follower_relationships(self, user_id: UUID) -> list[FollowResponse]: ...
 
@@ -56,28 +66,44 @@ class SocialFeedRepository(Protocol):
 class InMemoryRepository:
     def __init__(self) -> None:
         self._lock = RLock()
-        self._users: dict[UUID, UserResponse] = {}
+        self._users: dict[UUID, StoredUser] = {}
         self._followers: dict[UUID, dict[UUID, datetime]] = defaultdict(dict)
         self._posts: dict[UUID, list[PostResponse]] = defaultdict(list)
         self._feed: dict[UUID, list[FeedItemResponse]] = defaultdict(list)
 
     def create_user(self, username: str) -> UserResponse:
         with self._lock:
-            user = UserResponse(user_id=uuid4(), username=username)
+            user = StoredUser(user_id=uuid4(), username=username)
             self._users[user.user_id] = user
-            return user
+            return user.as_response()
 
     def get_user(self, user_id: UUID) -> UserResponse | None:
         with self._lock:
-            return self._users.get(user_id)
+            user = self._users.get(user_id)
+            if user is None or user.deleted_at is not None:
+                return None
+            return user.as_response()
 
     def list_users(self) -> list[UserResponse]:
         with self._lock:
-            return list(self._users.values())
+            return [
+                user.as_response()
+                for user in self._users.values()
+                if user.deleted_at is None
+            ]
 
     def user_exists(self, user_id: UUID) -> bool:
         with self._lock:
-            return user_id in self._users
+            user = self._users.get(user_id)
+            return user is not None and user.deleted_at is None
+
+    def soft_delete_user(self, user_id: UUID) -> bool:
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None or user.deleted_at is not None:
+                return False
+            user.deleted_at = datetime.now(timezone.utc)
+            return True
 
     def create_follow(self, follower_id: UUID, followed_id: UUID) -> FollowResponse:
         followed_at = datetime.now(timezone.utc)
@@ -89,9 +115,17 @@ class InMemoryRepository:
                 followed_at=followed_at,
             )
 
-    def get_followers(self, user_id: UUID) -> list[UUID]:
+    def get_followers(
+        self,
+        user_id: UUID,
+        operation: str = "get_followers.select_followers",
+    ) -> list[UUID]:
         with self._lock:
-            return list(self._followers[user_id].keys())
+            return [
+                follower_id
+                for follower_id in self._followers[user_id].keys()
+                if self.user_exists(follower_id)
+            ]
 
     def get_follower_relationships(self, user_id: UUID) -> list[FollowResponse]:
         with self._lock:
@@ -102,6 +136,7 @@ class InMemoryRepository:
                     followed_at=followed_at,
                 )
                 for follower_id, followed_at in self._followers[user_id].items()
+                if self.user_exists(follower_id)
             ]
 
     def create_post(
@@ -140,7 +175,11 @@ class InMemoryRepository:
 
     def get_user_feed(self, user_id: UUID, limit: int) -> list[FeedItemResponse]:
         with self._lock:
-            return list(self._feed[user_id][:limit])
+            return [
+                item
+                for item in self._feed[user_id]
+                if self.user_exists(item.actor_id)
+            ][:limit]
 
     def reset(self) -> None:
         with self._lock:

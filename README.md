@@ -108,6 +108,37 @@ When a user creates a post, the API does three things synchronously:
 
 That makes home-feed reads cheap because they are just a single-partition lookup. The tradeoff is duplicate storage and more expensive writes.
 
+## Soft Delete Behavior
+
+User deletion is implemented as a soft delete rather than a synchronous multi-table cleanup.
+
+- the `users` row gets a `deleted_at` timestamp
+- deleted users no longer appear in normal user reads
+- deleted users cannot create posts or follows
+- follower lists filter out deleted followers
+- feed reads filter out items whose `actor_id` now points at a deleted user
+
+This keeps writes simple and avoids a cross-table delete workflow in the request path. Old denormalized rows may still exist in Cassandra, but the API stops serving them.
+
+## Cassandra Tracing
+
+The app can optionally log Cassandra query traces for every repository-backed endpoint. This is not a relational `EXPLAIN` plan. Instead, it uses Cassandra request tracing and logs which coordinator handled the query plus the recorded trace events.
+
+Available env vars:
+
+- `CASSANDRA_TRACE_ENABLED=true|false`
+- `CASSANDRA_TRACE_SAMPLE_RATE=0.0-1.0`
+- `CASSANDRA_TRACE_LOG_EVENTS=true|false`
+- `CASSANDRA_TRACE_MAX_WAIT_SECONDS=5`
+
+When enabled, the app logs:
+
+- one HTTP request log line with `request_id`, method, path, status, and whether Cassandra tracing was on
+- one Cassandra trace log line per repository query
+- optional trace event lines if `CASSANDRA_TRACE_LOG_EVENTS=true`
+
+The deployment manifest keeps tracing disabled by default in [app.yaml](/home/DanielleMustillo/test/social-feed/k8s/app.yaml). Since this repo runs a single Cassandra node, the coordinator will usually be that same pod until the topology changes.
+
 ## Limitations
 
 - The service duplicates post content into follower feeds.
@@ -167,6 +198,14 @@ This endpoint is for demo convenience. In Cassandra it requires scanning the `us
 GET /users/{user_id}
 ```
 
+### Soft-delete a user
+
+```http
+DELETE /users/{user_id}
+```
+
+This marks the user deleted. It does not synchronously remove every follower, post, or feed row from Cassandra.
+
 ### Read followers for a user
 
 ```http
@@ -202,7 +241,7 @@ GET /feed?user_id={user_id}&limit=50
 - `app/`: FastAPI app, route handlers, fanout service, config, and Cassandra repository
 - `schema.cql`: keyspace and tables
 - `k8s/`: raw manifests for kind, MetalLB config, Cassandra, schema bootstrap, app deployment, and ingress
-- `tests/`: one API-flow test using the in-memory repository and one optional live test for a running cluster
+- `tests/`: bash demo script for exercising the live API
 
 ## Local Kind Workflow
 
@@ -275,21 +314,21 @@ If you do not want to edit host resolution, you can still call the ingress IP di
 curl http://<INGRESS_IP>/healthz -H 'Host: social-feed.local'
 ```
 
-Run the live integration test without needing local Python test tooling:
+Run the bash demo script against the live ingress:
 
 ```bash
-make test-live
+make test
 ```
 
-This builds a small test-runner image from [Dockerfile.test](/home/DanielleMustillo/test/social-feed/Dockerfile.test), targets the current ingress `LoadBalancer` IP, and sends the `Host: social-feed.local` header so ingress routing still matches.
+This resolves the current ingress `LoadBalancer` IP and runs [smoke_live.sh](/home/DanielleMustillo/test/social-feed/tests/smoke_live.sh) with the correct base URL and `Host` header.
 
-To wipe the demo data from Cassandra through the app and verify the cluster is empty again, run:
+If you want a direct shell smoke test, run:
 
 ```bash
-make test-cleanup
+tests/smoke_live.sh
 ```
 
-This calls `POST /admin/reset` and then verifies `GET /users` returns an empty list.
+It resets the app, creates Alice/Bob/Carol, adds follow relationships, creates posts, and prints the resulting profile/feed responses with `curl` and `jq`. You can override the target with `SOCIAL_FEED_BASE_URL` and `SOCIAL_FEED_HOST_HEADER`.
 
 ## Demo Flow
 
@@ -337,16 +376,6 @@ curl -s "$BASE_URL/users/$BOB_ID/feed?limit=50"
 curl -s "$BASE_URL/users/$CAROL_ID/feed?limit=50"
 ```
 
-## Tests
+## Demo Script
 
-Run the fast API-behavior test locally:
-
-```bash
-pytest tests/test_demo_flow.py
-```
-
-Run the live cluster test against any reachable deployment URL:
-
-```bash
-SOCIAL_FEED_BASE_URL=http://social-feed.local pytest -m live tests/test_live_demo_flow.py
-```
+The repo keeps a single shell-based demo script in [smoke_live.sh](/home/DanielleMustillo/test/social-feed/tests/smoke_live.sh). It is meant for manual showcasing rather than Python-based automated testing.

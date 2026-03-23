@@ -31,6 +31,14 @@ spec:
               value: "90"
             - name: CASSANDRA_RETRY_DELAY_SECONDS
               value: "2"
+            - name: CASSANDRA_TRACE_ENABLED
+              value: "true"
+            - name: CASSANDRA_TRACE_SAMPLE_RATE
+              value: "1.0"
+            - name: CASSANDRA_TRACE_LOG_EVENTS
+              value: "true"
+            - name: CASSANDRA_TRACE_MAX_WAIT_SECONDS
+              value: "5"
           readinessProbe:
             httpGet:
               path: /healthz

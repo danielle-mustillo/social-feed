@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from uuid import UUID
 
 from app.dependencies import get_repository
@@ -36,3 +36,16 @@ async def get_user(
             detail="User not found",
         )
     return user
+
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: UUID,
+    repository=Depends(get_repository),
+) -> Response:
+    if not repository.soft_delete_user(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -14,6 +14,10 @@ class Settings:
     cassandra_retry_delay_seconds: float
     cassandra_connect_timeout: float
     cassandra_request_timeout: float
+    cassandra_trace_enabled: bool
+    cassandra_trace_sample_rate: float
+    cassandra_trace_log_events: bool
+    cassandra_trace_max_wait_seconds: float
 
 
 @lru_cache
@@ -33,4 +37,16 @@ def get_settings() -> Settings:
         ),
         cassandra_connect_timeout=float(os.getenv("CASSANDRA_CONNECT_TIMEOUT", "5")),
         cassandra_request_timeout=float(os.getenv("CASSANDRA_REQUEST_TIMEOUT", "10")),
+        cassandra_trace_enabled=os.getenv("CASSANDRA_TRACE_ENABLED", "false").lower()
+        == "true",
+        cassandra_trace_sample_rate=float(
+            os.getenv("CASSANDRA_TRACE_SAMPLE_RATE", "1.0")
+        ),
+        cassandra_trace_log_events=os.getenv(
+            "CASSANDRA_TRACE_LOG_EVENTS", "false"
+        ).lower()
+        == "true",
+        cassandra_trace_max_wait_seconds=float(
+            os.getenv("CASSANDRA_TRACE_MAX_WAIT_SECONDS", "5")
+        ),
     )

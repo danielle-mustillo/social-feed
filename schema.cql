@@ -5,7 +5,8 @@ USE social_feed;
 
 CREATE TABLE IF NOT EXISTS users (
   user_id uuid PRIMARY KEY,
-  username text
+  username text,
+  deleted_at timestamp
 );
 
 CREATE TABLE IF NOT EXISTS followers_by_user (
