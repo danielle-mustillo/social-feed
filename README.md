@@ -1,6 +1,6 @@
 # Cassandra Social Feed on Kind with MetalLB
 
-This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster: a three-node Cassandra ring, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
+This repository contains a minimal social feed API that demonstrates Cassandra as a query-driven, append-optimized database. The stack is designed to run locally inside a `kind` Kubernetes cluster running on one physical machine: a 3-node local Kubernetes cluster (`1` control-plane, `2` workers), a three-node Cassandra ring, one FastAPI app, schema bootstrap via a Kubernetes Job, MetalLB for `LoadBalancer` IP allocation, and ingress-nginx for HTTP routing.
 
 ## Why Cassandra
 
@@ -269,6 +269,8 @@ make up
 
 This creates the kind cluster, installs MetalLB, installs ingress-nginx, starts a three-node Cassandra ring, initializes the schema, and deploys the API.
 
+The `kind` cluster itself is now multi-node, but all of those Kubernetes nodes are still Docker containers on this same machine. That gives you more realistic scheduling and pod placement without requiring extra hardware.
+
 The default MetalLB pool is `172.19.255.200-172.19.255.250`. That assumes the standard Docker `kind` bridge subnet on Linux. If your local Docker network uses a different subnet, update [k8s/metallb-config.yaml](/home/DanielleMustillo/test/social-feed/k8s/metallb-config.yaml) before running `make up`.
 
 ### 2. Discover the ingress IP
@@ -303,7 +305,9 @@ make up
 Check the workload state:
 
 ```bash
+kubectl get nodes
 kubectl get pods -n social-feed
+kubectl get pods -n social-feed -o wide
 kubectl get ingress -n social-feed
 kubectl logs job/social-feed-schema-init -n social-feed
 kubectl get svc -n ingress-nginx ingress-nginx-controller
@@ -336,6 +340,8 @@ kubectl logs -n social-feed deployment/social-feed-api --tail=200 | grep cassand
 ```
 
 `nodetool status` should show three `UN` nodes in `dc1`, and the trace logs will include `coordinator=<pod-ip>` values that identify which Cassandra node coordinated each request.
+
+`kubectl get nodes` should show one control-plane node and two worker nodes for the local kind cluster. `kubectl get pods -n social-feed -o wide` lets you see which Kubernetes node each Cassandra pod landed on.
 
 This resolves the current ingress `LoadBalancer` IP and runs [smoke_live.sh](/home/DanielleMustillo/test/social-feed/tests/smoke_live.sh) with the correct base URL and `Host` header.
 
